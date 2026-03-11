@@ -83,7 +83,89 @@ def extract_data_from_pdf(pdf_path):
             lines = text.split('\n')
             
             # ============================================================
-            # PRIMARY STRATEGY: Text line parsing
+            # PRIORITY 1: Extract from "DADOS CERTIFICADOS PELO SEI"
+            # This section appears after the marker line and has format:
+            #   "COM DOCUMENTAÇÃO CIVIL" or "SEM DOCUMENTAÇÃO CIVIL"
+            #   "RG  Nascimento  Nacionalidade  PIC"
+            #   "0110769684  18/03/1979  BRASIL  990201409452"
+            #   "Nome"
+            #   "PAULO ROBERTO SOARES"
+            #   "Pai                    Mãe"
+            #   "SEBASTIÃO SOARES       ROSINETE SERAFIM DE LIMA"
+            # ============================================================
+            
+            sei_start = -1
+            for i, line in enumerate(lines):
+                if 'CERTIFICADOS' in line.upper() and 'SEI' in line.upper():
+                    sei_start = i
+                    break
+            
+            if sei_start >= 0:
+                # Parse the SEI section (lines after the marker)
+                sei_lines = lines[sei_start:]
+                
+                for i, line in enumerate(sei_lines):
+                    stripped = line.strip()
+                    next_line = sei_lines[i + 1].strip() if i + 1 < len(sei_lines) else ''
+                    
+                    # --- RG + Nascimento from the data row ---
+                    # Pattern: "RG  Nascimento  Nacionalidade  PIC" (header)
+                    # followed by: "0110769684  18/03/1979  BRASIL  990201409452" (values)
+                    if 'RG' in stripped and 'Nascimento' in stripped and next_line:
+                        # Next line has the values
+                        parts = next_line.split()
+                        if parts:
+                            # First value is RG
+                            rg_candidate = parts[0].strip()
+                            if re.match(r'^\d{6,12}$', rg_candidate):
+                                data['RG'] = rg_candidate
+                            # Look for date in the values
+                            date_match = re.search(r'(\d{2}/\d{2}/\d{4})', next_line)
+                            if date_match:
+                                data['DATA_NASCIMENTO'] = date_match.group(1)
+                    
+                    # --- Nome from SEI ---
+                    # "Nome" alone, followed by the actual name
+                    if not data['NOME'] and stripped == 'Nome':
+                        if next_line and is_valid_name(next_line):
+                            data['NOME'] = clean_value(next_line)
+                    
+                    # --- Pai and Mãe on the same line ---
+                    # Pattern: "Pai                    Mãe" (header)
+                    # followed by: "SEBASTIÃO SOARES       ROSINETE SERAFIM DE LIMA" (values)
+                    has_pai = ('Pai' in stripped)
+                    has_mae = any(x in stripped for x in ['Mãe', 'Mae', 'Mâe']) or (
+                        has_pai and len(stripped) > 3 and stripped.startswith('Pai')
+                    )
+                    
+                    if has_pai and has_mae and next_line:
+                        # Pai and Mãe values are separated by multiple spaces
+                        # Split the values line on 3+ consecutive spaces
+                        parts = re.split(r'\s{3,}', next_line.strip())
+                        if len(parts) >= 2:
+                            if is_valid_name(parts[0]):
+                                data['NOME_PAI'] = clean_value(parts[0])
+                            if is_valid_name(parts[-1]):
+                                data['NOME_MAE'] = clean_value(parts[-1])
+                    
+                    # --- Pai alone (without Mãe on same line) ---
+                    if not data['NOME_PAI'] and stripped == 'Pai':
+                        if next_line and is_valid_name(next_line):
+                            data['NOME_PAI'] = clean_value(next_line)
+                    
+                    # --- Mãe alone ---
+                    if not data['NOME_MAE']:
+                        is_mae_alone = False
+                        for mae_variant in ['Mãe', 'Mae', 'Mâe']:
+                            if stripped == mae_variant:
+                                is_mae_alone = True
+                                break
+                        if is_mae_alone and next_line and is_valid_name(next_line):
+                            data['NOME_MAE'] = clean_value(next_line)
+            
+            # ============================================================
+            # PRIORITY 2 / FALLBACK: "DADOS DECLARADOS NA GRP" section
+            # Used for older PDFs without SEI section, or fields still missing
             # Pattern: label line → value on next line
             # ============================================================
             
@@ -92,10 +174,11 @@ def extract_data_from_pdf(pdf_path):
                 next_line = lines[i + 1].strip() if i + 1 < len(lines) else ''
                 next_line_2 = lines[i + 2].strip() if i + 2 < len(lines) else ''
                 
+                # Stop parsing GRP if we reach the SEI section
+                if 'CERTIFICADOS' in stripped.upper() and 'SEI' in stripped.upper():
+                    break
+                
                 # --- NOME ---
-                # Pattern 1: "Nome" alone on a line → value on next line
-                # Pattern 2: "Nome 44338899 || RRJJ..." → value on next line
-                # Skip "RG Nome RG Nome" header and "Nome Social"
                 if not data['NOME']:
                     is_nome_label = (
                         (stripped == 'Nome' or stripped.startswith('Nome ')) and
@@ -113,132 +196,50 @@ def extract_data_from_pdf(pdf_path):
                         data['RG'] = rg_match.group(1)
                 
                 # --- PAI ---
-                # Pattern 1: "Pai" alone → value on next line
-                # Pattern 2: "Pai 00111111..." → value on next line
                 if not data['NOME_PAI']:
                     if (stripped == 'Pai' or stripped.startswith('Pai ')) and 'Dados' not in stripped:
                         if next_line and is_valid_name(next_line):
                             data['NOME_PAI'] = clean_value(next_line)
                 
                 # --- MÃE ---
-                # Pattern 1: "Mãe" alone → value on next line
-                # Pattern 2: "Mãe 338899 || ..." → value on next line
                 if not data['NOME_MAE']:
                     is_mae_label = False
                     for mae_variant in ['Mãe', 'Mae', 'Mâe']:
                         if stripped == mae_variant or stripped.startswith(mae_variant + ' '):
                             is_mae_label = True
                             break
-                    # Also handle encoding: short label starting with M ending with e
                     if not is_mae_label and len(stripped) >= 2 and len(stripped.split()[0]) <= 4:
                         first_word = stripped.split()[0]
                         if first_word.startswith('M') and first_word.endswith('e') and first_word != 'Nome':
                             is_mae_label = True
-                    
                     if is_mae_label and next_line and is_valid_name(next_line):
                         data['NOME_MAE'] = clean_value(next_line)
                 
                 # --- NASCIMENTO ---
-                # Line: "Nascimento Idade aproximada Nacionalidade Naturalidade ..."
-                # Some PDFs: date on next line, others: noise line then date 2 lines ahead
                 if not data['DATA_NASCIMENTO'] and 'Nascimento' in stripped and 'Data' not in stripped:
-                    # Check same line
                     date_match = re.search(r'(\d{2}/\d{2}/\d{4})', stripped)
                     if date_match:
                         data['DATA_NASCIMENTO'] = date_match.group(1)
-                    # Check next line
                     if not data['DATA_NASCIMENTO'] and next_line:
                         date_match = re.search(r'(\d{2}/\d{2}/\d{4})', next_line)
                         if date_match:
                             data['DATA_NASCIMENTO'] = date_match.group(1)
-                    # Check 2 lines ahead (some PDFs have a noise line in between)
                     if not data['DATA_NASCIMENTO'] and next_line_2:
                         date_match = re.search(r'(\d{2}/\d{2}/\d{4})', next_line_2)
                         if date_match:
                             data['DATA_NASCIMENTO'] = date_match.group(1)
-                
-                # --- CPF ---
-                # Line containing CPF values or "NÃO ENCONTRADO"
-                # Format: "CPF NÃO ENCONTRADO 314.576.888-32 314.576.888-32 CPF NÃO ENCONTRADO"
-                # Order: DETRAN | SEAP | RECEITA FEDERAL | INTERNO
+            
+            # ============================================================
+            # CPF: Always from the CPF section (same in both GRP and SEI)
+            # ============================================================
+            for i, line in enumerate(lines):
+                stripped = line.strip()
                 if not data['CPF'] and 'CPF' in stripped:
                     cpf_numbers = re.findall(r'\d{3}\.\d{3}\.\d{3}-\d{2}', stripped)
                     if cpf_numbers:
-                        # Use the first valid CPF found
                         data['CPF'] = cpf_numbers[0]
-                    elif 'ENCONTRADO' in stripped.upper():
-                        # Only set NÃO ENCONTRADO if this is the data line (not just the header)
-                        # The data line typically has more content than just "CPF"
-                        if len(stripped) > 5:
-                            data['CPF'] = 'NÃO ENCONTRADO'
-            
-            # ============================================================
-            # FALLBACK: Table-based extraction (for any fields still missing)
-            # ============================================================
-            tables = page.extract_tables()
-            
-            for table in tables:
-                if len(table) < 10:
-                    continue
-                
-                for ri, row in enumerate(table):
-                    if not row or not row[0]:
-                        continue
-                    cell = str(row[0]).strip()
-                    
-                    # RG from table
-                    if not data['RG'] and re.match(r'^\d{6,12}$', cell) and ri <= 3:
-                        data['RG'] = cell
-                    
-                    # Nome from table: "Nome\nVALUE"
-                    if not data['NOME'] and '\n' in cell:
-                        parts = cell.split('\n', 1)
-                        if parts[0].strip() == 'Nome' and is_valid_name(parts[1]):
-                            data['NOME'] = clean_value(parts[1])
-                    
-                    # Pai from table: "Pai\nVALUE"
-                    if not data['NOME_PAI'] and '\n' in cell:
-                        parts = cell.split('\n', 1)
-                        if parts[0].strip() == 'Pai' and is_valid_name(parts[1]):
-                            data['NOME_PAI'] = clean_value(parts[1])
-                    
-                    # Mãe from table (various encodings)
-                    if not data['NOME_MAE'] and '\n' in cell:
-                        parts = cell.split('\n', 1)
-                        label = parts[0].strip()
-                        is_mae = (
-                            label == 'Mãe' or label == 'Mae' or label == 'Mâe' or
-                            (len(label) <= 4 and label.startswith('M') and label.endswith('e') and label != 'Nome')
-                        )
-                        if is_mae and is_valid_name(parts[1]):
-                            data['NOME_MAE'] = clean_value(parts[1])
-                    
-                    # Nascimento from table: date in next row
-                    if not data['DATA_NASCIMENTO']:
-                        date_match = re.match(r'^(\d{2}/\d{2}/\d{4})$', cell)
-                        if date_match:
-                            data['DATA_NASCIMENTO'] = date_match.group(1)
-                    
-                    if not data['DATA_NASCIMENTO'] and cell == 'Nascimento':
-                        if ri + 1 < len(table) and table[ri + 1] and table[ri + 1][0]:
-                            next_cell = str(table[ri + 1][0]).strip()
-                            date_match = re.search(r'(\d{2}/\d{2}/\d{4})', next_cell)
-                            if date_match:
-                                data['DATA_NASCIMENTO'] = date_match.group(1)
-            
-            # CPF fallback in tables
-            if not data['CPF']:
-                for table in tables:
-                    for row in table:
-                        for cell in row:
-                            if cell and 'CPF' in str(cell):
-                                cpf_numbers = re.findall(r'\d{3}\.\d{3}\.\d{3}-\d{2}', str(cell))
-                                if cpf_numbers:
-                                    data['CPF'] = cpf_numbers[0]
-                                    break
-                                elif 'ENCONTRADO' in str(cell).upper() and len(str(cell)) > 10:
-                                    data['CPF'] = 'NÃO ENCONTRADO'
-                                    break
+                    elif 'ENCONTRADO' in stripped.upper() and len(stripped) > 5:
+                        data['CPF'] = 'NÃO ENCONTRADO'
             
             if not data['CPF']:
                 data['CPF'] = 'NÃO ENCONTRADO'
