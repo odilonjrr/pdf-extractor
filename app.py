@@ -10,9 +10,9 @@ from docx.opc.constants import RELATIONSHIP_TYPE as RT
 
 app = Flask(__name__)
 
-# Use /tmp for file storage on cloud servers (Render, etc.)
+# Use /tmp for file storage on cloud servers (Render, Railway, etc.)
 # Locally, use project subdirectories
-if os.environ.get('RENDER') or os.environ.get('PRODUCTION'):
+if os.environ.get('RENDER') or os.environ.get('RAILWAY_ENVIRONMENT') or os.environ.get('PRODUCTION'):
     app.config['UPLOAD_FOLDER'] = '/tmp/pdf_extractor/uploads'
     app.config['OUTPUT_FOLDER'] = '/tmp/pdf_extractor/output'
 else:
