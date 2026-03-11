@@ -82,71 +82,74 @@ def extract_data_from_pdf(pdf_path):
             text = page.extract_text() or ''
             lines = text.split('\n')
             
+            # Also extract with layout=True to preserve column positions
+            # This is critical for the SEI section where Pai/Mãe are side by side
+            text_layout = page.extract_text(layout=True) or ''
+            lines_layout = text_layout.split('\n')
+            
             # ============================================================
             # PRIORITY 1: Extract from "DADOS CERTIFICADOS PELO SEI"
-            # This section appears after the marker line and has format:
-            #   "COM DOCUMENTAÇÃO CIVIL" or "SEM DOCUMENTAÇÃO CIVIL"
-            #   "RG  Nascimento  Nacionalidade  PIC"
-            #   "0110769684  18/03/1979  BRASIL  990201409452"
-            #   "Nome"
-            #   "PAULO ROBERTO SOARES"
-            #   "Pai                    Mãe"
-            #   "SEBASTIÃO SOARES       ROSINETE SERAFIM DE LIMA"
+            # Uses layout=True text to properly split columns
             # ============================================================
             
             sei_start = -1
-            for i, line in enumerate(lines):
+            for i, line in enumerate(lines_layout):
                 if 'CERTIFICADOS' in line.upper() and 'SEI' in line.upper():
                     sei_start = i
                     break
             
             if sei_start >= 0:
-                # Parse the SEI section (lines after the marker)
-                sei_lines = lines[sei_start:]
+                sei_lines = lines_layout[sei_start:]
                 
                 for i, line in enumerate(sei_lines):
                     stripped = line.strip()
-                    next_line = sei_lines[i + 1].strip() if i + 1 < len(sei_lines) else ''
+                    next_line_raw = sei_lines[i + 1] if i + 1 < len(sei_lines) else ''
+                    next_line = next_line_raw.strip()
                     
-                    # --- RG + Nascimento from the data row ---
-                    # Pattern: "RG  Nascimento  Nacionalidade  PIC" (header)
-                    # followed by: "0110769684  18/03/1979  BRASIL  990201409452" (values)
+                    # --- RG + Nascimento ---
                     if 'RG' in stripped and 'Nascimento' in stripped and next_line:
-                        # Next line has the values
                         parts = next_line.split()
                         if parts:
-                            # First value is RG
                             rg_candidate = parts[0].strip()
                             if re.match(r'^\d{6,12}$', rg_candidate):
                                 data['RG'] = rg_candidate
-                            # Look for date in the values
                             date_match = re.search(r'(\d{2}/\d{2}/\d{4})', next_line)
                             if date_match:
                                 data['DATA_NASCIMENTO'] = date_match.group(1)
                     
-                    # --- Nome from SEI ---
-                    # "Nome" alone, followed by the actual name
+                    # --- Nome ---
                     if not data['NOME'] and stripped == 'Nome':
                         if next_line and is_valid_name(next_line):
                             data['NOME'] = clean_value(next_line)
                     
-                    # --- Pai and Mãe on the same line ---
-                    # Pattern: "Pai                    Mãe" (header)
-                    # followed by: "SEBASTIÃO SOARES       ROSINETE SERAFIM DE LIMA" (values)
+                    # --- Pai and Mãe (side by side columns) ---
                     has_pai = ('Pai' in stripped)
-                    has_mae = any(x in stripped for x in ['Mãe', 'Mae', 'Mâe']) or (
-                        has_pai and len(stripped) > 3 and stripped.startswith('Pai')
-                    )
+                    has_mae = any(x in stripped for x in ['Mãe', 'Mae', 'Mâe'])
                     
                     if has_pai and has_mae and next_line:
-                        # Pai and Mãe values are separated by multiple spaces
-                        # Split the values line on 3+ consecutive spaces
-                        parts = re.split(r'\s{3,}', next_line.strip())
-                        if len(parts) >= 2:
-                            if is_valid_name(parts[0]):
-                                data['NOME_PAI'] = clean_value(parts[0])
-                            if is_valid_name(parts[-1]):
-                                data['NOME_MAE'] = clean_value(parts[-1])
+                        # Use the header line to find the column position of Mãe
+                        mae_col = -1
+                        for mae_variant in ['Mãe', 'Mae', 'Mâe']:
+                            pos = line.find(mae_variant)
+                            if pos > 0:
+                                mae_col = pos
+                                break
+                        
+                        if mae_col > 0 and len(next_line_raw) > mae_col:
+                            pai_name = next_line_raw[:mae_col].strip()
+                            mae_name = next_line_raw[mae_col:].strip()
+                            if is_valid_name(pai_name):
+                                data['NOME_PAI'] = clean_value(pai_name)
+                            if is_valid_name(mae_name):
+                                data['NOME_MAE'] = clean_value(mae_name)
+                        else:
+                            # Fallback: split by 3+ spaces
+                            parts = re.split(r'\s{3,}', next_line)
+                            if len(parts) >= 2:
+                                if is_valid_name(parts[0]):
+                                    data['NOME_PAI'] = clean_value(parts[0])
+                                if is_valid_name(parts[-1]):
+                                    data['NOME_MAE'] = clean_value(parts[-1])
                     
                     # --- Pai alone (without Mãe on same line) ---
                     if not data['NOME_PAI'] and stripped == 'Pai':
