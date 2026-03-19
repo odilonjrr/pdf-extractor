@@ -1,0 +1,213 @@
+:root {
+    --primary: #2563eb;
+    --primary-hover: #1d4ed8;
+    --bg-color: #f1f5f9;
+    --panel-bg: #ffffff;
+    --text-main: #1e293b;
+    --text-muted: #64748b;
+    --border: #e2e8f0;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-main);
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+.app-header {
+    background-color: var(--panel-bg);
+    padding: 1rem 2rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 10;
+}
+
+.app-container {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+.form-panel {
+    flex: 0 0 450px;
+    background-color: var(--panel-bg);
+    border-right: 1px solid var(--border);
+    padding: 2rem;
+    overflow-y: auto;
+}
+
+.form-panel h2 {
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.subtitle {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    margin-bottom: 2rem;
+}
+
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-row {
+    display: flex;
+    gap: 1rem;
+}
+
+.form-row .form-group {
+    flex: 1;
+}
+
+label {
+    display: block;
+    font-weight: 500;
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+}
+
+input[type="text"] {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-family: 'Inter', sans-serif;
+    font-size: 1rem;
+    transition: border-color 0.2s;
+}
+
+input[type="text"]:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.radio-group {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    background: var(--bg-color);
+    padding: 0.75rem;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+}
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.btn-primary {
+    background-color: var(--primary);
+    color: white;
+}
+
+.btn-primary:hover {
+    background-color: var(--primary-hover);
+}
+
+.preview-panel {
+    flex: 1;
+    background-color: #cbd5e1;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 2rem;
+    overflow-y: auto;
+}
+
+.a4-page {
+    width: 210mm;
+    height: 297mm;
+    background-color: white;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+    position: relative; /* Todo o conteúdo absoluto se baseará nisso */
+    flex-shrink: 0;
+}
+
+.form-bg {
+    width: 100%;
+    height: 100%;
+    object-fit: fill; /* Preenche todo o A4 certinho */
+    opacity: 0.8;
+}
+
+.print-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none; /* Para não atrapalhar clicks se houver */
+}
+
+/* Print Items */
+.print-item {
+    position: absolute;
+    font-family: 'Roboto Mono', monospace; /* Fonte monoespaçada para bater certinho com os quadradinhos */
+    font-size: 11px;
+    line-height: 1;
+    color: black;
+    white-space: pre;
+    font-weight: 600;
+}
+
+/* Espaçamento por letra para formulários com quadrinhos */
+.boxed-text span {
+    display: inline-block;
+    width: 3.51mm; /* Valor aproximado ajustável de cada quadrinho na folha */
+    text-align: center;
+}
+
+/* REGRAS DE IMPRESSÃO */
+@media print {
+    @page {
+        size: A4;
+        margin: 0; /* Sem margens do navegador */
+    }
+
+    body {
+        background-color: white;
+    }
+
+    .no-print {
+        display: none !important;
+    }
+
+    .preview-panel {
+        padding: 0;
+        margin: 0;
+        background-color: white;
+        display: block;
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+    }
+
+    .a4-page {
+        box-shadow: none;
+        width: 210mm;
+        height: 297mm;
+        margin: 0;
+        position: relative;
+    }
+}

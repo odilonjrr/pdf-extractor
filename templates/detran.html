@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Preenchedor de Pedido de Identificação</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Roboto+Mono:wght@500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/detran_style.css">
+</head>
+<body>
+    <nav class="main-tabs no-print" style="background: #1e293b; padding: 0 2rem; display: flex; gap: 1rem;">
+        <a href="/" style="color: white; padding: 1rem; text-decoration: none; border-bottom: 3px solid transparent; opacity: 0.7; font-family: 'Inter', sans-serif;">Extrator PDF (SEAP)</a>
+        <a href="/detran" style="color: white; padding: 1rem; text-decoration: none; border-bottom: 3px solid #3b82f6; opacity: 1; font-weight: 600; font-family: 'Inter', sans-serif;">Preenchedor PID (DETRAN)</a>
+    </nav>
+    <header class="app-header no-print">
+        <h1>Preenchedor de Pedido de Identificação - DETRAN</h1>
+        <div class="actions" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+            <!-- Save/Load Profiles Externally -->
+            <button onclick="exportProfiles()" class="btn" title="Baixar formulário atual para o seu computador" style="background: #8b5cf6; color: white;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                Exportar (Salvar)
+            </button>
+            <label class="btn" title="Carregar um arquivo com dados preenchidos" style="background: #ec4899; color: white; cursor: pointer; margin: 0;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                Importar (Carregar)
+                <input type="file" id="importFile" accept=".json" style="display: none;" onchange="importProfiles(event)">
+            </label>
+
+            <!-- Funcionalidade para visualizar ou não a grade do documento final -->
+            <button onclick="toggleBackground()" class="btn" style="background: #e2e8f0; color: #1e293b;">
+                Ocultar/Mostrar Fundo
+            </button>
+            <button onclick="changeGlobalFontSize(0.5)" class="btn" style="background: #3b82f6; color: white; padding: 0.5rem 1rem;">
+                A+ (Fonte)
+            </button>
+            <button onclick="changeGlobalFontSize(-0.5)" class="btn" style="background: #ef4444; color: white; padding: 0.5rem 1rem;">
+                A- (Fonte)
+            </button>
+            <button id="calibrateBtn" onclick="toggleCalibration()" class="btn" style="background: #f59e0b; color: white;">
+                Modo Calibragem (Arrastar)
+            </button>
+            <button onclick="window.print()" class="btn btn-primary">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                Imprimir Documento
+            </button>
+        </div>
+    </header>
+
+    <main class="app-container">
+        <!-- ENTRY FORM -->
+        <section class="form-panel no-print">
+            <h2>Dados do Formulário</h2>
+            <p class="subtitle">Apenas os campos solicitados estão habilitados. Ajuste o documento e clique em Imprimir quando pronto.</p>
+            
+            <form id="dataForm" autocomplete="off">
+                <!-- 01. Tipo de Pedido -->
+                <div class="form-group">
+                    <label>01 - Tipo de Pedido</label>
+                    <div class="radio-group">
+                        <label><input type="radio" name="tipo_pedido" value="1_via"> 1ª Via</label>
+                        <label><input type="radio" name="tipo_pedido" value="2_via"> 2ª Via</label>
+                        <label><input type="radio" name="tipo_pedido" value="atest_antec"> Atest. Antec.</label>
+                        <label><input type="radio" name="tipo_pedido" value="pesquisa"> Pesquisa</label>
+                        <label><input type="radio" name="tipo_pedido" value="atualizacao"> Atualização Civil</label>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <!-- 02. Data da identificacao -->
+                    <div class="form-group">
+                        <label for="data_identificacao">02 - Data da Identificação</label>
+                        <input type="text" id="data_identificacao" placeholder="DDMMAAAA" maxlength="8">
+                    </div>
+                    <!-- 03. Tipo de isenção -->
+                    <div class="form-group">
+                        <label>03 - Tipo de Isenção</label>
+                        <div class="radio-group">
+                            <label><input type="radio" name="tipo_isencao" value="1"> 1- Fund. Leão XIII</label>
+                            <label><input type="radio" name="tipo_isencao" value="2"> 2- Defensoria</label>
+                            <label><input type="radio" name="tipo_isencao" value="3"> 3- Outros</label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 08. Nome Requerente -->
+                <div class="form-group">
+                    <label for="nome_requerente">08 - Nome do Requerente</label>
+                    <input type="text" id="nome_requerente" placeholder="Nome completo" maxlength="60" oninput="this.value = this.value.toUpperCase()">
+                </div>
+
+                <!-- 09. Nome Pai -->
+                <div class="form-group">
+                    <label for="nome_pai">09 - Nome do Pai</label>
+                    <input type="text" id="nome_pai" placeholder="Nome do pai" maxlength="60" oninput="this.value = this.value.toUpperCase()">
+                </div>
+
+                <!-- 10. Nome Mae -->
+                <div class="form-group">
+                    <label for="nome_mae">10 - Nome da Mãe</label>
+                    <input type="text" id="nome_mae" placeholder="Nome da mãe" maxlength="60" oninput="this.value = this.value.toUpperCase()">
+                </div>
+
+                <!-- 11. Conjuge -->
+                <div class="form-group">
+                    <label for="nome_conjuge">11 - Nome do Cônjuge/Ex (se casado/desquit/divor/sepa)</label>
+                    <input type="text" id="nome_conjuge" placeholder="Nome do cônjuge/ex-cônjuge" maxlength="60" oninput="this.value = this.value.toUpperCase()">
+                </div>
+
+                <div class="form-row">
+                    <!-- 12. Sexo -->
+                    <div class="form-group">
+                        <label>12 - Sexo</label>
+                        <div class="radio-group">
+                            <label><input type="radio" name="sexo" value="masc"> Masc</label>
+                            <label><input type="radio" name="sexo" value="fem"> Fem</label>
+                        </div>
+                    </div>
+                    <!-- 13. Data Nasc -->
+                    <div class="form-group">
+                        <label for="nascimento">13 - Data de Nascimento</label>
+                        <input type="text" id="nascimento" placeholder="DDMMAAAA" maxlength="8">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <!-- 14. Maior 65 -->
+                    <div class="form-group">
+                        <label>14 - Maior de 65 anos?</label>
+                        <div class="radio-group">
+                            <label><input type="radio" name="maior_65" value="sim"> Sim</label>
+                            <label><input type="radio" name="maior_65" value="nao"> Não</label>
+                        </div>
+                    </div>
+                    <!-- 15. Estado Civil -->
+                    <div class="form-group">
+                        <label>15 - Estado Civil</label>
+                        <div class="radio-group">
+                            <label><input type="radio" name="estado_civil" value="1"> 1 - Solteiro(a)</label>
+                            <label><input type="radio" name="estado_civil" value="2"> 2 - Casado(a)</label>
+                            <label><input type="radio" name="estado_civil" value="3"> 3 - Viúvo(a)</label>
+                            <label><input type="radio" name="estado_civil" value="4"> 4 - Separado(a) Judic.</label>
+                            <label><input type="radio" name="estado_civil" value="5"> 5 - Desquitado(a)</label>
+                            <label><input type="radio" name="estado_civil" value="6"> 6 - Divorciado(a)</label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 16. Tipo Documento -->
+                <div class="form-group" style="background:#f8fafc; padding:15px; border-radius:8px;">
+                    <label>16 - Tipo de Documento</label>
+                    <div class="radio-group" style="margin-bottom: 10px;">
+                        <label><input type="radio" name="tipo_doc" value="nascim"> Nascim.</label>
+                        <label><input type="radio" name="tipo_doc" value="casam"> Casam.</label>
+                        <label><input type="radio" name="tipo_doc" value="certificado"> Certificado</label>
+                    </div>
+                    <p style="font-size:12px; color:gray; margin-bottom: 5px;">* Preencha os campos abaixo apenas se não houver matrícula unificada (PID)</p>
+                    <div class="form-row">
+                        <input type="text" id="doc_livro" placeholder="LIVRO" style="width: 25%">
+                        <input type="text" id="doc_folha" placeholder="FOLHA" style="width: 25%">
+                        <input type="text" id="doc_termo" placeholder="TERMO" style="width: 25%">
+                    </div>
+                    <div class="form-row" style="margin-top: 5px;">
+                        <input type="text" id="doc_circ" placeholder="CIRC" style="width: 25%">
+                        <input type="text" id="doc_distr" placeholder="DISTR" style="width: 25%">
+                        <input type="text" id="doc_subdistr" placeholder="SUBD." style="width: 25%">
+                        <input type="text" id="doc_zona" placeholder="ZONA" style="width: 25%">
+                    </div>
+                    <div style="margin-top: 5px;">
+                        <input type="text" id="doc_estado" placeholder="ESTADO (Sigla)" maxlength="2" style="width: 50%" oninput="this.value = this.value.toUpperCase()">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <!-- 17. Municipio Cartorio -->
+                    <div class="form-group">
+                        <label>17 - Município Cartório</label>
+                        <div class="form-row">
+                            <input type="text" id="cartorio_codigo" placeholder="CÓD" style="width:30%" maxlength="5">
+                            <input type="text" id="cartorio_nome" placeholder="NOME DO MUNICÍPIO" style="width:70%" oninput="this.value = this.value.toUpperCase()" maxlength="35">
+                        </div>
+                    </div>
+                    <!-- 18. Local Nascimento -->
+                    <div class="form-group">
+                        <label>18 - Local Nascimento</label>
+                        <div class="form-row">
+                            <input type="text" id="nascimento_codigo" placeholder="CÓD" style="width:30%" maxlength="5">
+                            <input type="text" id="nascimento_nome" placeholder="NOME DO MUNICÍPIO" style="width:70%" oninput="this.value = this.value.toUpperCase()" maxlength="35">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 19. Nacionalidade -->
+                <div class="form-row">
+                    <div class="form-group" style="flex:1.5;">
+                        <label>19 - Nacionalidade</label>
+                        <div class="radio-group" style="margin-bottom: 5px;">
+                            <label><input type="radio" name="nacionalidade" value="1"> 1 - Brasileiro</label>
+                            <label><input type="radio" name="nacionalidade" value="2"> 2 - Português</label>
+                            <label><input type="radio" name="nacionalidade" value="3"> 3 - Bras. Nasc. Ext.</label>
+                            <label><input type="radio" name="nacionalidade" value="4"> 4 - Naturalizado</label>
+                            <label><input type="radio" name="nacionalidade" value="5"> 5 - Estrangeiro</label>
+                        </div>
+                    </div>
+                    <!-- 21. CPF -->
+                    <div class="form-group" style="flex:1;">
+                        <label>21 - Incluir CPF?</label>
+                        <div class="radio-group" style="margin-bottom: 5px;">
+                            <label><input type="radio" name="incluir_cpf" value="sim"> Sim</label>
+                            <label><input type="radio" name="incluir_cpf" value="nao"> Não</label>
+                        </div>
+                        <input type="text" id="cpf_numero" placeholder="Nº INSCRIÇÃO (CPF)" maxlength="12">
+                    </div>
+                </div>
+
+                <div class="form-group" style="background:#f8fafc; padding:15px; border-radius:8px;">
+                    <label>26 - Endereço</label>
+                    <div class="form-row" style="margin-bottom: 10px;">
+                        <input type="text" id="end_cep" placeholder="CEP" style="width:30%" maxlength="9">
+                        <input type="text" id="end_logradouro" placeholder="LOGRADOURO" style="width:70%" oninput="this.value = this.value.toUpperCase()" maxlength="45">
+                    </div>
+                    <div class="form-row" style="margin-bottom: 10px;">
+                        <input type="text" id="end_numero" placeholder="NÚMERO e COMPL." style="width:50%" oninput="this.value = this.value.toUpperCase()" maxlength="30">
+                        <input type="text" id="end_bairro" placeholder="BAIRRO" style="width:50%" oninput="this.value = this.value.toUpperCase()" maxlength="30">
+                    </div>
+                    <div class="form-row">
+                        <input type="text" id="end_cod_mun" placeholder="CÓD MUN" style="width:25%" maxlength="5">
+                        <input type="text" id="end_nome_mun" placeholder="NOME MUNICÍPIO" style="width:55%" oninput="this.value = this.value.toUpperCase()" maxlength="30">
+                        <input type="text" id="end_uf" placeholder="UF" style="width:20%" maxlength="2" oninput="this.value = this.value.toUpperCase()">
+                    </div>
+                </div>
+
+                <!-- 27. Autorizador -->
+                <div class="form-group">
+                    <label>27 - Autorizador (se menor de 12 anos)</label>
+                    <div class="radio-group" style="margin-bottom: 5px;">
+                        <label><input type="radio" name="autorizador" value="pai"> 1- Pai</label>
+                        <label><input type="radio" name="autorizador" value="mae"> 2- Mãe</label>
+                        <label><input type="radio" name="autorizador" value="resp"> 3- Resp.</label>
+                    </div>
+                </div>
+
+                <!-- 28. Total de Exigências / 29. Digitais Coletadas -->
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="total_exigencias">28 - Total de Exigências (Apenas se houver)</label>
+                        <input type="text" id="total_exigencias" placeholder="Deixe em branco se vazio" maxlength="2">
+                    </div>
+                    <div class="form-group">
+                        <label>29 - Digitais Coletadas (Padrão: 1-Mãos)</label>
+                        <div class="radio-group">
+                            <label><input type="radio" name="digitais_col" value="1" checked> 1- Mãos</label>
+                            <label><input type="radio" name="digitais_col" value="2"> 2- Pés</label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 31. Impossibilitado de Assinar -->
+                <div class="form-group">
+                    <label>31 - Impossibilitado de Assinar</label>
+                    <div class="radio-group">
+                        <label><input type="radio" name="imp_assinar" value="1"> 1- Não Alfab.</label>
+                        <label><input type="radio" name="imp_assinar" value="2"> 2- Port. Defic.</label>
+                        <label><input type="radio" name="imp_assinar" value="3"> 3- Id. Pré-escolar</label>
+                        <label><input type="radio" name="imp_assinar" value="4"> 4- Outro</label>
+                    </div>
+                </div>
+
+                <!-- 33. Observações (PID / Digitais) -->
+                <div class="form-group">
+                    <label>33 - Observações / Controles</label>
+                    <input type="text" id="obs_pid" placeholder="PID (Matrícula unificada certidão)" maxlength="200" style="margin-bottom: 5px;">
+                    <input type="text" id="obs_digitais" placeholder="Digitais (Informações adicionais)" maxlength="200" style="margin-bottom: 5px;">
+                    <input type="text" id="obs_extra_1" placeholder="Observação adicional 1" maxlength="200" style="margin-bottom: 5px;">
+                    <input type="text" id="obs_extra_2" placeholder="Observação adicional 2" maxlength="200" style="margin-bottom: 5px;">
+                    <input type="text" id="obs_extra_3" placeholder="Observação adicional 3" maxlength="200" style="margin-bottom: 5px;">
+                    <input type="text" id="obs_extra_4" placeholder="Observação adicional 4" maxlength="200">
+                </div>
+
+                <div class="note">
+                    <p style="color:red; font-size:12px; margin-top:20px;"><em>Verifique na visualização ao lado se os campos estão caindo exatamente nos quadradinhos.</em></p>
+                </div>
+                <div style="height: 50px;"></div>
+            </form>
+        </section>
+
+        <!-- PRINT PREVIEW -->
+        <section class="preview-panel">
+            <div id="config-output-panel" class="no-print" style="display: none; position: absolute; bottom: 20px; right: 20px; z-index: 999; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 4px 15px rgb(0 0 0 / 0.15); max-width: 380px;">
+                <label style="font-size: 13px; font-weight: 500; margin-bottom: 5px; display: block;">Copie a nova configuração para o script.js:</label>
+                <textarea id="config-output" style="width: 100%; height: 150px; font-family: monospace; font-size: 11px; margin-top: 5px;" readonly></textarea>
+            </div>
+            
+            <div class="a4-page" id="a4-paper">
+                <img src="/static/formulario_vazio.jpg" alt="Fundo do Formulário" class="form-bg no-print" id="form-bg">
+                <!-- Data Layers -->
+                <div id="print-layer" class="print-layer"></div>
+            </div>
+        </section>
+    </main>
+    <script src="/static/detran_script.js"></script>
+</body>
+</html>

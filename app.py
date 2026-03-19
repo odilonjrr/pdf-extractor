@@ -370,6 +370,11 @@ def index():
     return render_template('index.html')
 
 
+@app.route('/detran')
+def detran():
+    return render_template('detran.html')
+
+
 @app.route('/upload', methods=['POST'])
 def upload_pdfs():
     if 'pdfs' not in request.files:
