@@ -20,6 +20,7 @@ const pageCount = document.getElementById('pageCount');
 const cardsGrid = document.getElementById('cardsGrid');
 const generateBtn = document.getElementById('generateBtn');
 const addMoreBtn = document.getElementById('addMoreBtn');
+const saveDataBtn = document.getElementById('saveDataBtn');
 const downloadBtn = document.getElementById('downloadBtn');
 const newSessionBtn = document.getElementById('newSessionBtn');
 const loaderProgress = document.getElementById('loaderProgress');
@@ -66,6 +67,11 @@ addMoreBtn.addEventListener('click', () => {
 
 // Generate document
 generateBtn.addEventListener('click', generateDocument);
+
+// Save extracted data
+if (saveDataBtn) {
+    saveDataBtn.addEventListener('click', saveExtractedData);
+}
 
 // Download
 downloadBtn.addEventListener('click', () => {
@@ -222,6 +228,53 @@ function removeCard(index) {
         renderCards();
     }
     updateStats();
+}
+
+// ================================================================
+// Export Data
+// ================================================================
+
+function saveExtractedData() {
+    if (state.extractedData.length === 0) {
+        showToast('Nenhum dado para salvar', 'error');
+        return;
+    }
+    
+    // Process cada PDF com pequeno atraso para o navegador não bloquear múltiplos downloads
+    state.extractedData.forEach((data, index) => {
+        setTimeout(() => {
+            const numNascimento = data.DATA_NASCIMENTO ? data.DATA_NASCIMENTO.replace(/\D/g, '') : '';
+            const numCpf = (data.CPF && data.CPF !== 'NÃO ENCONTRADO') ? data.CPF.replace(/\D/g, '') : '';
+            
+            // Mapeando dados para o formato que a aba do DETRAN consome via Importação JSON
+            const detranFormat = {
+                "tipo_pedido": "1_via",
+                "nome_requerente": data.NOME || "",
+                "nome_pai": data.NOME_PAI || "",
+                "nome_mae": data.NOME_MAE || "",
+                "nascimento": numNascimento,
+                "incluir_cpf": numCpf ? "sim" : "nao",
+                "cpf_numero": numCpf,
+                "nacionalidade": "1", // Brasileiro
+                "estado_civil": "1",  // Solteiro
+                "obs_pid": data.RG ? `RG EXTRAÍDO: ${data.RG}` : ""
+            };
+            
+            let nomePessoa = data.NOME ? data.NOME.trim().replace(/[^a-zA-Z0-9\u00C0-\u00FF]/g, '_') : `Extraido_${index + 1}`;
+            
+            const blob = new Blob([JSON.stringify(detranFormat, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `detran_${nomePessoa}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }, index * 400); // 400ms de intervalo por arquivo
+    });
+    
+    showToast(`${state.extractedData.length} arquivo(s) salvo(s) com sucesso!`, 'success');
 }
 
 // ================================================================
